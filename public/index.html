@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contracts App</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">📄 Contracts App</div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="templates" onclick="switchTab('templates')">📚 תבניות</button>
+    <button class="tab"        data-tab="drafts"    onclick="switchTab('drafts')">✏️ טיוטות</button>
+    <button class="tab"        data-tab="editor"    onclick="switchTab('editor')" id="tabEditor" style="display:none">✍️ עורך</button>
+  </nav>
+  <div class="topbar-right">
+    <button class="btn btn-ghost" onclick="openSettings()">⚙️ הגדרות</button>
+    <button class="btn btn-primary" onclick="openUploadTemplate()">+ תבנית חדשה</button>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <!-- Templates tab -->
+  <div id="tab-templates" class="tab-content">
+    <div class="card">
+      <div id="templatesList">טוען...</div>
+    </div>
+  </div>
+
+  <!-- Drafts tab -->
+  <div id="tab-drafts" class="tab-content" style="display:none">
+    <div class="card">
+      <div id="draftsList">טוען...</div>
+    </div>
+  </div>
+
+  <!-- Editor tab -->
+  <div id="tab-editor" class="tab-content" style="display:none">
+    <div id="editorRoot"></div>
+  </div>
+
+</main>
+
+<!-- Toast -->
+<div id="toast" class="toast hidden"></div>
+
+<!-- Upload Template Modal -->
+<div id="uploadModal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeUploadTemplate()"></div>
+  <div class="modal-box">
+    <header class="modal-header">
+      <div class="modal-title">תבנית חוזה חדשה</div>
+      <button class="btn-close" onclick="closeUploadTemplate()">✕</button>
+    </header>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>שם לתבנית</label>
+        <input type="text" id="tplName" placeholder="הסכם הצטרפות 2026" />
+      </div>
+      <div class="form-group">
+        <label>קובץ (Word / HTML / TXT)</label>
+        <input type="file" id="tplFile" accept=".docx,.html,.htm,.txt" />
+        <div class="hint">שדות יזוהו אוטומטית מ-<code>{{field}}</code>, <code>[field]</code>, או קווים תחתונים <code>_______</code>.</div>
+      </div>
+      <div class="form-group">
+        <label>או הדבק טקסט</label>
+        <textarea id="tplPaste" rows="5" placeholder="(חלופה להעלאת קובץ)"></textarea>
+      </div>
+      <div id="tplMsg" class="msg"></div>
+    </div>
+    <footer class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeUploadTemplate()">ביטול</button>
+      <button class="btn btn-primary" onclick="submitUploadTemplate()" id="tplBtn">העלה ונתח</button>
+    </footer>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settingsModal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeSettings()"></div>
+  <div class="modal-box" style="max-width:480px">
+    <header class="modal-header">
+      <div class="modal-title">⚙️ הגדרות</div>
+      <button class="btn-close" onclick="closeSettings()">✕</button>
+    </header>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>תיקיית שמירה מקומית</label>
+        <input type="text" id="stSaveFolder" placeholder="C:\\Users\\Shlomi\\Documents\\Contracts" dir="ltr" />
+        <div class="hint">נתיב מוחלט. טיוטות (.contract.json) ו-PDF סופיים יישמרו כאן.</div>
+      </div>
+      <div class="form-group">
+        <label>שם חותם ברירת מחדל</label>
+        <input type="text" id="stSignerName" placeholder="ClubRRRR" />
+      </div>
+      <div id="stMsg" class="msg"></div>
+    </div>
+    <footer class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeSettings()">ביטול</button>
+      <button class="btn btn-primary" onclick="saveSettings()">💾 שמור</button>
+    </footer>
+  </div>
+</div>
+
+<script src="numberToWords.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
