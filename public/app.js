@@ -32,7 +32,11 @@ const state = {
   tab: 'templates',
   currentTemplate: null,
 };
-const editorState = { values: {}, search: '', title: '', signature_data: null, draftId: null, _tplId: null };
+const editorState = {
+  values: {}, search: '', title: '',
+  signature_data: null, draftId: null, _tplId: null,
+  markers: new Set(),
+};
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -314,7 +318,20 @@ function renderFieldsPane() {
 
 function renderFieldRow(f) {
   const v = editorState.values[f.key] ?? '';
+  const isMarked = editorState.markers.has(f.key);
   const kindChip = f.kind !== 'text' ? `<span class="kind-chip">${esc(f.kind)}</span>` : '';
+
+  // Bilingual label: English is primary (larger), Hebrew below (smaller).
+  // If we don't have a translation, show only what we have.
+  const en = f.label_en || f.label || f.key;
+  const he = f.label_he || '';
+  const labelHtml = `
+    <div style="display:flex;flex-direction:column;gap:1px;flex:1">
+      <span class="label-en">${esc(en)}</span>
+      ${he ? `<span class="label-he">${esc(he)}</span>` : ''}
+    </div>
+    ${kindChip}`;
+
   let inputHtml;
   if (f.kind === 'amount_words') {
     inputHtml = `<input type="text" class="amount-words" data-field="${esc(f.key)}" value="${esc(v)}" placeholder="הזן סכום — יומר למילים"
@@ -327,10 +344,29 @@ function renderFieldRow(f) {
     inputHtml = `<input type="email" data-field="${esc(f.key)}" value="${esc(v)}" oninput="onField('${esc(f.key)}', this.value)" />`;
   } else if (f.kind === 'phone') {
     inputHtml = `<input type="tel" dir="ltr" data-field="${esc(f.key)}" value="${esc(v)}" oninput="onField('${esc(f.key)}', this.value)" />`;
+  } else if (f.kind === 'checkbox') {
+    inputHtml = `<label style="display:flex;align-items:center;gap:8px;grid-column:1/-1;font-size:13px">
+                   <input type="checkbox" data-field="${esc(f.key)}" ${v === 'V' || v === true ? 'checked' : ''}
+                     onchange="onField('${esc(f.key)}', this.checked ? 'V' : '')" />
+                   מסומן / checked
+                 </label>`;
   } else {
     inputHtml = `<input type="text" data-field="${esc(f.key)}" value="${esc(v)}" oninput="onField('${esc(f.key)}', this.value)" />`;
   }
-  return `<div class="cc-field-row"><label><span>${esc(f.label)}</span>${kindChip}</label>${inputHtml}</div>`;
+
+  return `<div class="cc-field-row ${isMarked ? 'marked' : ''}" data-field-row="${esc(f.key)}">
+    <label>${labelHtml}</label>
+    <button class="cc-marker-btn" onclick="toggleMarker('${esc(f.key)}')" title="${isMarked ? 'בטל הדגשה' : 'סמן עם מרקר'}">
+      ${isMarked ? '🟡' : '🖍'}
+    </button>
+    ${inputHtml}
+  </div>`;
+}
+
+function toggleMarker(key) {
+  if (editorState.markers.has(key)) editorState.markers.delete(key);
+  else                               editorState.markers.add(key);
+  renderEditor();
 }
 
 let _prevTimer = null;
@@ -366,8 +402,9 @@ function livePreviewHtml() {
     /<span class="field" data-field="([^"]+)">[^<]*<\/span>/g,
     (_, key) => {
       const v = editorState.values[key];
-      if (v == null || v === '') return `<span class="field field-empty" data-field="${key}">________</span>`;
-      return `<span class="field field-filled" data-field="${key}">${esc(String(v))}</span>`;
+      const marked = editorState.markers.has(key) ? ' field-marked' : '';
+      if (v == null || v === '') return `<span class="field field-empty${marked}" data-field="${key}">________</span>`;
+      return `<span class="field field-filled${marked}" data-field="${key}">${esc(String(v))}</span>`;
     }
   );
   if (editorState.signature_data) {

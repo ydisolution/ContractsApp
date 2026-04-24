@@ -18,9 +18,112 @@
 
 const mammoth = require('mammoth');
 
-const RE_DOUBLE = /\{\{\s*([^\s}][^}]*?)\s*\}\}/g;     // {{field}} or {{field:Label}}
-const RE_SQUARE = /\[\s*([A-Za-z_\u0590-\u05FF][^\]\n]{0,60})\s*\]/g;
-const RE_LINE   = /_{4,}/g;
+const RE_DOUBLE  = /\{\{\s*([^\s}][^}]*?)\s*\}\}/g;     // {{field}} or {{field:Label}}
+const RE_SQUARE  = /\[\s*([A-Za-z_\u0590-\u05FF][^\]\n]{0,60})\s*\]/g;
+const RE_LINE    = /_{4,}/g;
+const RE_EMPTY_PAREN = /\(\s{2,}\)/g;                    // "(  )" two or more spaces
+const RE_CHECKBOX = /[□☐]|\[\s*[xXvV✓ ]?\s*\]/g;          // □ ☐ [ ] [X] [V]
+const RE_DATE    = /_{1,3}\s*\/\s*_{1,3}(?:\s*\/\s*_{1,4})?/g;    // __/__/__  or __/__/____
+
+// ── Hebrew ↔ English label dictionary ────────────────────────────────────────
+// Bidirectional; keys are lowercase-trimmed. Used both to translate a label
+// from one language to the other and to clean up auto-generated labels.
+const LABEL_DICT = (() => {
+  const pairs = [
+    ['name',                  'שם'],
+    ['full name',             'שם מלא'],
+    ['first name',            'שם פרטי'],
+    ['last name',             'שם משפחה'],
+    ['client',                'לקוח'],
+    ['client name',           'שם הלקוח'],
+    ['seller',                'מוכר'],
+    ['buyer',                 'קונה'],
+    ['owner',                 'בעלים'],
+    ['party',                 'צד'],
+    ['representative',        'נציג'],
+    ['address',               'כתובת'],
+    ['city',                  'עיר'],
+    ['state',                 'מדינה'],
+    ['country',               'ארץ'],
+    ['zip',                   'מיקוד'],
+    ['zip code',              'מיקוד'],
+    ['phone',                 'טלפון'],
+    ['mobile',                'נייד'],
+    ['cell',                  'נייד'],
+    ['telephone',             'טלפון'],
+    ['email',                 'אימייל'],
+    ['id',                    'ת.ז.'],
+    ['id number',             'תעודת זהות'],
+    ['passport',              'דרכון'],
+    ['date',                  'תאריך'],
+    ['date of birth',         'תאריך לידה'],
+    ['dob',                   'תאריך לידה'],
+    ['amount',                'סכום'],
+    ['sum',                   'סכום'],
+    ['price',                 'מחיר'],
+    ['cost',                  'עלות'],
+    ['fee',                   'תשלום'],
+    ['total',                 'סה״כ'],
+    ['down payment',          'מקדמה'],
+    ['deposit',               'פיקדון'],
+    ['amount in words',       'סכום במילים'],
+    ['signature',             'חתימה'],
+    ['witness',               'עד'],
+    ['witnesses',             'עדים'],
+    ['property',              'נכס'],
+    ['apartment',             'דירה'],
+    ['house',                 'בית'],
+    ['building',              'בניין'],
+    ['land',                  'קרקע'],
+    ['lot',                   'חלקה'],
+    ['block',                 'גוש'],
+    ['room',                  'חדר'],
+    ['notes',                 'הערות'],
+    ['note',                  'הערה'],
+    ['company',               'חברה'],
+    ['corporation',           'תאגיד'],
+    ['tax id',                'ח.פ.'],
+    ['vat',                   'מע״מ'],
+    ['bank',                  'בנק'],
+    ['account',               'חשבון'],
+    ['account number',        'מספר חשבון'],
+    ['branch',                'סניף'],
+    ['iban',                  'IBAN'],
+    ['subject',               'נושא'],
+    ['term',                  'תקופה'],
+    ['start date',            'תאריך התחלה'],
+    ['end date',              'תאריך סיום'],
+    ['closing date',          'תאריך סגירה'],
+    ['delivery date',         'תאריך מסירה'],
+    ['initials',              'ראשי תיבות'],
+  ];
+  const enToHe = new Map(), heToEn = new Map();
+  for (const [en, he] of pairs) {
+    enToHe.set(en.toLowerCase(), he);
+    heToEn.set(he, en[0].toUpperCase() + en.slice(1));
+  }
+  return { enToHe, heToEn };
+})();
+
+function translateLabel(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return { en: '', he: '' };
+  // Pure Hebrew? → look up English
+  if (/^[^A-Za-z]+$/.test(s)) {
+    return { he: s, en: LABEL_DICT.heToEn.get(s) || '' };
+  }
+  // Pure ASCII? → look up Hebrew
+  const lower = s.toLowerCase().replace(/[_/]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/^[A-Za-z0-9 _/]+$/.test(s)) {
+    return { en: titleCase(lower), he: LABEL_DICT.enToHe.get(lower) || '' };
+  }
+  // Mixed — return as-is, no translation
+  return { en: s, he: '' };
+}
+
+function titleCase(s) {
+  return s.split(' ').map(w => w ? w[0].toUpperCase() + w.slice(1) : w).join(' ');
+}
 
 // ── Parse the uploaded buffer into { html, title, fields } ────────────────────
 async function parseBuffer(buffer, filename) {
@@ -92,12 +195,16 @@ function extractFields(html) {
     let key = slugify(rawKey) || `field_${++auto}`;
     while (seenKeys.has(key)) key = key + '_2';
     seenKeys.add(key);
+    const rawLabel = (labelOverride || rawKey || key).trim();
+    const { en, he } = translateLabel(rawLabel);
     fields.push({
       key,
-      label:  (labelOverride || rawKey || key).trim(),
-      group:  null,
-      order:  fields.length,
-      kind:   guessKind(labelOverride || rawKey),
+      label:    rawLabel,           // original (for legacy code paths)
+      label_en: en || rawLabel,
+      label_he: he || '',
+      group:    null,
+      order:    fields.length,
+      kind:     guessKind(rawLabel),
     });
     return key;
   };
@@ -115,22 +222,57 @@ function extractFields(html) {
 
   // Pass 2: [key]  — skip matches inside existing spans we just emitted
   current = current.replace(RE_SQUARE, (match, inner) => {
-    // Ignore things that look like HTML attribute chunks
     if (/["<>]/.test(inner)) return match;
+    // Ignore short checkbox-like markers — Pass 4 handles them
+    if (/^\s*[xXvV✓ ]?\s*$/.test(inner)) return match;
     const key = register(inner);
     return fieldSpan(key);
   });
 
-  // Pass 3: long underscores → auto fields
-  current = current.replace(RE_LINE, () => {
-    const key = register(`field_${++auto}`, `שדה ${auto}`);
+  // Pass 3: date patterns like __/__/__ or __/__/____ → single date field
+  current = current.replace(RE_DATE, () => {
+    const idx = ++auto;
+    const key = register(`date_${idx}`, `Date ${idx}`);
+    const f = fields[fields.length - 1];
+    f.kind = 'date'; f.label_he = f.label_he || 'תאריך';
     return fieldSpan(key);
   });
 
-  // Group assignment: walk the HTML, whenever we cross an <h1>..<h4>, any
-  // subsequent fields (by order) inherit that group name until the next heading.
-  assignGroupsByHeading(current, fields);
+  // Pass 4: label-before-underscore. Scan for sequences of "label: _______"
+  //   or "label _______" and use the label as the field name. Works for
+  //   both English and Hebrew labels.
+  current = current.replace(
+    /([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF \.\-'"]{1,40}?)[\s:：]{1,3}(_{4,})/g,
+    (match, label, underscores) => {
+      const key = register(slugify(label) || `field_${++auto}`, label.trim());
+      return match.slice(0, match.length - underscores.length) + fieldSpan(key);
+    }
+  );
 
+  // Pass 5: remaining long underscores → generic auto fields
+  current = current.replace(RE_LINE, () => {
+    const idx = ++auto;
+    const key = register(`field_${idx}`, `Field ${idx}`);
+    return fieldSpan(key);
+  });
+
+  // Pass 6: empty parentheses "(   )" → short text field
+  current = current.replace(RE_EMPTY_PAREN, () => {
+    const idx = ++auto;
+    const key = register(`field_${idx}`, `Field ${idx}`);
+    return '(' + fieldSpan(key) + ')';
+  });
+
+  // Pass 7: checkbox markers → boolean-ish field
+  current = current.replace(RE_CHECKBOX, () => {
+    const idx = ++auto;
+    const key = register(`check_${idx}`, `Checkbox ${idx}`);
+    const f = fields[fields.length - 1];
+    f.kind = 'checkbox';
+    return fieldSpan(key);
+  });
+
+  assignGroupsByHeading(current, fields);
   return { wiredHtml: current, fields };
 }
 
