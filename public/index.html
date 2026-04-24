@@ -61,9 +61,13 @@
         <input type="text" id="tplName" placeholder="הסכם הצטרפות 2026" />
       </div>
       <div class="form-group">
-        <label>קובץ (Word / HTML / TXT)</label>
+        <label>קובץ Word (.docx) — PDF לא נתמך</label>
         <input type="file" id="tplFile" accept=".docx,.html,.htm,.txt" />
-        <div class="hint">שדות יזוהו אוטומטית מ-<code>{{field}}</code>, <code>[field]</code>, או קווים תחתונים <code>_______</code>.</div>
+        <div class="hint">
+          פתח את החוזה ב-Word, שמור כ-.docx, והעלה כאן.<br/>
+          שדות יזוהו אוטומטית מ-<code>{{field}}</code>, <code>[field]</code>, או קווים תחתונים <code>_______</code>.<br/>
+          אם זה PDF, פתח ב-Word (כן, Word יודע לפתוח PDF) ושמור כ-.docx.
+        </div>
       </div>
       <div class="form-group">
         <label>או הדבק טקסט</label>

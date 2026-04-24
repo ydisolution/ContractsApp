@@ -25,24 +25,59 @@ const RE_LINE   = /_{4,}/g;
 // ── Parse the uploaded buffer into { html, title, fields } ────────────────────
 async function parseBuffer(buffer, filename) {
   const lower = String(filename || '').toLowerCase();
+
+  // ── Reject formats we can't parse, BEFORE we accidentally render the
+  //    raw bytes as "text" and end up with a template full of mojibake.
+  if (lower.endsWith('.pdf')) {
+    throw new Error('קבצי PDF אינם נתמכים כתבניות. פתח את הקובץ ב-Word, שמור אותו כ-.docx, והעלה אותו מחדש.');
+  }
+  if (/\.(doc|rtf|odt|pages)$/.test(lower)) {
+    const ext = lower.split('.').pop();
+    throw new Error(`פורמט .${ext} לא נתמך. שמור את הקובץ כ-.docx (Word) והעלה אותו מחדש.`);
+  }
+  // Magic-byte guard: even if someone renamed a PDF to .txt/.html, detect it
+  if (buffer.length >= 5 && buffer.slice(0, 5).toString('ascii') === '%PDF-') {
+    throw new Error('הקובץ הוא למעשה PDF (על אף סיומת אחרת). המר ל-.docx והעלה מחדש.');
+  }
+
   let html;
   if (lower.endsWith('.docx')) {
-    const r = await mammoth.convertToHtml({ buffer });
-    html = r.value;
+    try {
+      const r = await mammoth.convertToHtml({ buffer });
+      html = r.value;
+    } catch (e) {
+      throw new Error('לא ניתן לקרוא את קובץ ה-Word. ייתכן שהוא פגום או בגרסה ישנה מדי. שמור שוב כ-.docx.');
+    }
   } else if (lower.endsWith('.html') || lower.endsWith('.htm')) {
     html = buffer.toString('utf8');
-  } else {
-    // Plain text — wrap each line / paragraph
+  } else if (lower.endsWith('.txt') || !lower.includes('.')) {
     const text = buffer.toString('utf8');
     html = text
       .split(/\n{2,}/)
       .map(p => `<p>${escapeHtml(p.trim()).replace(/\n/g, '<br>')}</p>`)
       .join('\n');
+  } else {
+    const ext = lower.split('.').pop();
+    throw new Error(`סיומת .${ext} לא נתמכת. השתמש ב-.docx, .html, או .txt.`);
   }
 
+  html = stripInvisible(html);
   const { wiredHtml, fields } = extractFields(html);
   const title = inferTitleFromHtml(html) || filename || 'New contract';
   return { html: wiredHtml, title, fields };
+}
+
+// Word inserts lots of invisible Unicode chars (BOM, LRM/RLM, ZWSP, soft
+// hyphens, directional overrides) that render as ugly little boxes in fonts
+// that don't implement them. Strip the ones we never want to see.
+function stripInvisible(html) {
+  return String(html)
+    .replace(/\uFEFF/g, '')                    // BOM
+    .replace(/[\u200B-\u200F]/g, '')           // ZWSP, ZWNJ, ZWJ, LRM, RLM
+    .replace(/[\u202A-\u202E]/g, '')           // directional overrides
+    .replace(/[\u2066-\u2069]/g, '')           // isolate controls
+    .replace(/\u00AD/g, '')                    // soft hyphen
+    .replace(/\u0000/g, '');                   // NULL
 }
 
 // Replace every detected placeholder with a span that the filler can
