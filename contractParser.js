@@ -95,6 +95,110 @@ const LABEL_DICT = (() => {
     ['deed',                  'שטר'],
     ['lease',                 'חוזה שכירות'],
     ['rent',                  'שכר דירה'],
+    // Common phrases in US real-estate boilerplate
+    ['having an office at',   'במשרד הרשום ב'],
+    ['office at',             'משרד ב'],
+    ['located at',            'ממוקם ב'],
+    ['residing at',           'המתגורר ב'],
+    ['town of',               'העיר'],
+    ['county of',             'המחוז'],
+    ['situated in the county of', 'ממוקם במחוז'],
+    ['situated and being in the county of', 'ממוקם במחוז'],
+    ['parcel number',         'מספר חלקה'],
+    ['designated parcel number', 'מספר חלקה ייעודי'],
+    ['subdivision plan',      'תכנית חלוקה'],
+    ['subdivision plan entitled', 'תכנית חלוקה שכותרתה'],
+    ['office of the clerk',   'משרד הפקיד'],
+    ['clerk of',              'פקיד'],
+    ['map no',                'מפה מספר'],
+    ['map number',            'מספר מפה'],
+    ['as map no',             'כמפה מס׳'],
+    ['premises/parcel',       'נכס / חלקה'],
+    ['dwelling and structures', 'בית מגורים ומבנים'],
+    ['new construction agreement', 'הסכם בניה חדשה'],
+    ['this agreement',        'הסכם זה'],
+    ['between',               'בין'],
+    ['parties',               'הצדדים'],
+    // Single-word vocabulary used in bridge translations
+    ['office',                'משרד'],
+    ['situated',              'ממוקם'],
+    ['located',               'ממוקם'],
+    ['town',                  'עיר'],
+    ['county',                'מחוז'],
+    ['parcel',                'חלקה'],
+    ['number',                'מספר'],
+    ['subdivision',           'חלוקה'],
+    ['entitled',              'שכותרתו'],
+    ['plan',                  'תכנית'],
+    ['map',                   'מפה'],
+    ['clerk',                 'פקיד'],
+    ['designated',            'מיועד'],
+    ['dwelling',              'בית מגורים'],
+    ['structures',            'מבנים'],
+    ['agreement',             'הסכם'],
+    ['company',               'חברה'],
+    ['liability',             'אחריות'],
+    ['llc',                   'בע"מ'],
+    ['ltd',                   'בע"מ'],
+    ['inc',                   'תאגיד'],
+    ['day',                   'יום'],
+    ['month',                 'חודש'],
+    ['year',                  'שנה'],
+    ['street',                'רחוב'],
+    ['number',                'מספר'],
+    ['floor',                 'קומה'],
+    ['unit',                  'יחידה'],
+    ['garage',                'חניה'],
+    ['storage',               'מחסן'],
+    ['balcony',               'מרפסת'],
+    ['inspector',             'בודק'],
+    ['inspection',            'בדיקה'],
+    ['warranty',              'אחריות'],
+    ['default',               'הפרה'],
+    ['breach',                'הפרה'],
+    ['terms',                 'תנאים'],
+    ['conditions',            'תנאים'],
+    ['payment',               'תשלום'],
+    ['instalment',            'תשלום'],
+    ['installment',           'תשלום'],
+    ['balance',               'יתרה'],
+    ['receipt',               'קבלה'],
+    ['invoice',               'חשבונית'],
+    ['attorney',              'עורך דין'],
+    ['lawyer',                'עורך דין'],
+    ['notary',                'נוטריון'],
+    ['representative',        'נציג'],
+    ['agent',                 'סוכן'],
+    ['broker',                'מתווך'],
+    ['filed',                 'מתויק'],
+    ['recorded',              'רשום'],
+    ['issued',                'הונפק'],
+    ['signed',                'נחתם'],
+    ['executed',              'נחתם'],
+    ['no.',                   'מס׳'],
+    ['no',                    'מס׳'],
+    ['number',                'מספר'],
+    ['total',                 'סה״כ'],
+    ['per',                   'לכל'],
+    ['based',                 'בהתאם'],
+    ['according',             'בהתאם'],
+    ['as',                    'כ-'],
+    ['limited',               'מוגבלת'],
+    ['unlimited',             'בלתי מוגבל'],
+    ['buildings',             'מבנים'],
+    ['improvements',          'שיפורים'],
+    ['structures',            'מבנים'],
+    ['constructed',           'שנבנה'],
+    ['land',                  'קרקע'],
+    ['property',              'נכס'],
+    ['parties',               'הצדדים'],
+    ['party',                 'צד'],
+    ['seller',                'מוכר'],
+    ['buyer',                 'קונה'],
+    ['investments',           'השקעות'],
+    ['investment',            'השקעה'],
+    ['real estate',           'נדל״ן'],
+    ['llc',                   'בע״מ'],
     ['notes',                 'הערות'],
     ['note',                  'הערה'],
     ['company',               'חברה'],
@@ -122,20 +226,78 @@ const LABEL_DICT = (() => {
   return { enToHe, heToEn };
 })();
 
+// Stop words we drop when the label was captured from sentence context.
+// They confuse translation but don't add information.
+const STOP_EN = new Set([
+  'the', 'a', 'an', 'of', 'in', 'at', 'to', 'for', 'and', 'or', '&', 'as',
+  'by', 'on', 'with', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+  'has', 'have', 'had', 'having', 'do', 'does', 'did', 'will', 'would',
+  'shall', 'should', 'this', 'that', 'these', 'those', 'said', 'such',
+  'which', 'who', 'whom', 'whose', 'it', 'its', 'his', 'her', 'their',
+]);
+
+// Trim a verbose label captured from sentence text into the last few
+// meaningful words. Keeps it short enough to be a useful UI label.
+function trimToFocus(label) {
+  const cleaned = String(label || '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/[",.\(\)]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  const words = cleaned.split(' ');
+  // Keep the last 4 non-stopword, non-numeric tokens
+  const kept = [];
+  for (let i = words.length - 1; i >= 0 && kept.length < 4; i--) {
+    const w = words[i].toLowerCase();
+    if (STOP_EN.has(w)) continue;
+    if (/^\d+$/.test(w)) continue;             // bare numbers like "1"
+    kept.unshift(words[i]);
+  }
+  return kept.length ? kept.join(' ') : '';   // empty signals "no usable label"
+}
+
 function translateLabel(raw) {
   const s = String(raw || '').trim();
   if (!s) return { en: '', he: '' };
+
   // Pure Hebrew? → look up English
   if (/^[^A-Za-z]+$/.test(s)) {
     return { he: s, en: LABEL_DICT.heToEn.get(s) || '' };
   }
-  // Pure ASCII? → look up Hebrew
+
+  // Whole-label exact lookup
   const lower = s.toLowerCase().replace(/[_/]+/g, ' ').replace(/\s+/g, ' ').trim();
-  if (/^[A-Za-z0-9 _/]+$/.test(s)) {
-    return { en: titleCase(lower), he: LABEL_DICT.enToHe.get(lower) || '' };
+  if (LABEL_DICT.enToHe.has(lower)) {
+    return { en: titleCase(lower), he: LABEL_DICT.enToHe.get(lower) };
   }
-  // Mixed — return as-is, no translation
-  return { en: s, he: '' };
+
+  // Compound-phrase lookup: try sliding 3-word, 2-word, 1-word substrings
+  const tokens = lower.split(/\s+/).filter(Boolean);
+  for (const win of [4, 3, 2]) {
+    for (let i = 0; i + win <= tokens.length; i++) {
+      const phrase = tokens.slice(i, i + win).join(' ');
+      if (LABEL_DICT.enToHe.has(phrase)) {
+        return { en: titleCase(lower), he: LABEL_DICT.enToHe.get(phrase) };
+      }
+    }
+  }
+
+  // Word-by-word fallback: drop stop words, translate the rest, join.
+  const heParts = [];
+  let translatedAny = false;
+  for (const t of tokens) {
+    if (STOP_EN.has(t)) continue;
+    if (LABEL_DICT.enToHe.has(t)) {
+      heParts.push(LABEL_DICT.enToHe.get(t));
+      translatedAny = true;
+    } else {
+      heParts.push(t);
+    }
+  }
+  if (translatedAny) return { en: titleCase(lower), he: heParts.join(' ') };
+
+  return { en: titleCase(lower), he: '' };
 }
 
 function titleCase(s) {
@@ -279,11 +441,17 @@ function extractFields(html) {
   // Pass 4: label-before-underscore. Scan for sequences of "label: _______"
   //   or "label _______" or "label: $_______" (currency-prefixed numbers)
   //   and use the label as the field name. Works for English and Hebrew.
+  //   The captured label is later trimmed by trimToFocus() to the last
+  //   few "important" words so we don't end up with monster labels like
+  //   "Texas Liability Company Having An Office At".
   current = current.replace(
-    /([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF \.\-'"]{1,40}?)[\s:：]{1,3}([\$£€₪]?\s*)(_{4,})/g,
+    /([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF \.\-'"]{1,80}?)[\s:：]{1,3}([\$£€₪]?\s*)(_{4,})/g,
     (match, label, currency, underscores) => {
-      const key = register(slugify(label) || `field_${++auto}`, label.trim());
-      // Mark amount fields when a currency sign is present
+      const focus = trimToFocus(label);
+      // If the captured "label" boils down to nothing meaningful (all
+      // stopwords or just punctuation), emit a generic auto field.
+      const useFocus = focus || `Field ${++auto}`;
+      const key = register(slugify(useFocus) || `field_${auto}`, useFocus);
       if (currency.trim()) fields[fields.length - 1].kind = 'amount';
       return match.slice(0, match.length - underscores.length) + fieldSpan(key);
     }
