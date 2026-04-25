@@ -71,6 +71,7 @@ const LABEL_DICT = (() => {
     ['witness',               'עד'],
     ['witnesses',             'עדים'],
     ['property',              'נכס'],
+    ['premises',              'נכס / מקרקעין'],
     ['apartment',             'דירה'],
     ['house',                 'בית'],
     ['building',              'בניין'],
@@ -78,6 +79,22 @@ const LABEL_DICT = (() => {
     ['lot',                   'חלקה'],
     ['block',                 'גוש'],
     ['room',                  'חדר'],
+    ['sales price',           'מחיר מכירה'],
+    ['purchase price',        'מחיר רכישה'],
+    ['list price',            'מחיר מבוקש'],
+    ['purchaser',             'רוכש'],
+    ['vendor',                'מוכר'],
+    ['grantor',               'המעביר'],
+    ['grantee',               'הנעבר'],
+    ['escrow',                'נאמנות'],
+    ['closing',               'סגירה'],
+    ['mortgage',              'משכנתא'],
+    ['earnest money',         'דמי רצינות'],
+    ['contingency',           'תנאי'],
+    ['title',                 'בעלות'],
+    ['deed',                  'שטר'],
+    ['lease',                 'חוזה שכירות'],
+    ['rent',                  'שכר דירה'],
     ['notes',                 'הערות'],
     ['note',                  'הערה'],
     ['company',               'חברה'],
@@ -239,12 +256,14 @@ function extractFields(html) {
   });
 
   // Pass 4: label-before-underscore. Scan for sequences of "label: _______"
-  //   or "label _______" and use the label as the field name. Works for
-  //   both English and Hebrew labels.
+  //   or "label _______" or "label: $_______" (currency-prefixed numbers)
+  //   and use the label as the field name. Works for English and Hebrew.
   current = current.replace(
-    /([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF \.\-'"]{1,40}?)[\s:：]{1,3}(_{4,})/g,
-    (match, label, underscores) => {
+    /([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF \.\-'"]{1,40}?)[\s:：]{1,3}([\$£€₪]?\s*)(_{4,})/g,
+    (match, label, currency, underscores) => {
       const key = register(slugify(label) || `field_${++auto}`, label.trim());
+      // Mark amount fields when a currency sign is present
+      if (currency.trim()) fields[fields.length - 1].kind = 'amount';
       return match.slice(0, match.length - underscores.length) + fieldSpan(key);
     }
   );
