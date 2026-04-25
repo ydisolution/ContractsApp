@@ -255,6 +255,27 @@ function extractFields(html) {
     return fieldSpan(key);
   });
 
+  // Pass 3b: "block-end labels" — an ALL-CAPS or Hebrew label that ends a
+  // block element with no value after the colon. These are common section
+  // headings in real-estate contracts (PREMISES:, PURCHASER:, SALES PRICE: $)
+  // and need to become fillable. The label must be uppercase Latin or pure
+  // Hebrew so we don't false-match ordinary body text like "as follows:".
+  //
+  //   <p>PREMISES:</p>                  → <p>PREMISES: <span class="field"…/></p>
+  //   <p>SALES PRICE: $</p>             → kind=amount, span placed after the $
+  //   <p><strong>PURCHASER</strong>:</p> → label captured even when bolded
+  current = current.replace(
+    /((?:<\/?(?:strong|b|em|u|span|i)[^>]*>)*)([A-Z][A-Z0-9 &/\.\-'"]{1,40}[A-Z]|[\u0590-\u05FF][\u0590-\u05FF0-9 &/\.\-'"]{1,40}[\u0590-\u05FF])((?:<\/?(?:strong|b|em|u|span|i)[^>]*>)*)\s*[:：]\s*([\$£€₪]?)\s*(<\/(?:p|h[1-6]|li|td|div)>)/g,
+    (match, pre, label, post, currency, close) => {
+      const cleanLabel = label.replace(/\s+/g, ' ').trim();
+      // Skip junk like single repeated letters
+      if (cleanLabel.length < 3) return match;
+      const key = register(slugify(cleanLabel) || `field_${++auto}`, cleanLabel);
+      if (currency.trim()) fields[fields.length - 1].kind = 'amount';
+      return pre + label + post + ': ' + (currency || '') + ' ' + fieldSpan(key) + close;
+    }
+  );
+
   // Pass 4: label-before-underscore. Scan for sequences of "label: _______"
   //   or "label _______" or "label: $_______" (currency-prefixed numbers)
   //   and use the label as the field name. Works for English and Hebrew.
